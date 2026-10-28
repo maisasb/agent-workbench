@@ -1,0 +1,8 @@
+{
+  "name": "agent-process",
+  "description": "A process for building agent workflows: test rounds with cost and timeline analysis, consistency sweeps over instruction files, and design rules for agent teams.",
+  "version": "0.1.0",
+  "author": {
+    "name": "maisasb"
+  }
+}

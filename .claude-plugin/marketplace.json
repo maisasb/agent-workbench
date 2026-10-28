@@ -1,0 +1,18 @@
+{
+  "name": "agent-workbench",
+  "owner": {
+    "name": "maisasb"
+  },
+  "metadata": {
+    "description": "Personal marketplace: a process to design, test and review agent workflows with Claude Code",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "agent-process",
+      "description": "A process for building agent workflows: test rounds with cost and timeline analysis, consistency sweeps over instruction files, and design rules for agent teams.",
+      "source": "./plugins/agent-process",
+      "version": "0.1.0"
+    }
+  ]
+}
