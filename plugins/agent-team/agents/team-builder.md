@@ -19,22 +19,26 @@ You are a teammate. The lead gives you a brief and then messages. Read `rules.md
 
 ## Per unit
 
-1. Do each task. A task that another unit depends on is committed alone, and its SHA goes to the lead and the dependents as `committed <task> <sha>`.
+1. Do each task. A task that another unit depends on is committed alone, and its SHA goes to the lead as `committed <task> <sha>`.
 2. Commit the unit (`rules.md`, Git). When the brief has `pr_notes`, they decide the type of the commit. Do not push.
 3. Run the gates on the diff of the unit: the lint in check-only mode and the trim of comments and prose that you added. Amend with their fixes. When the last task was committed alone, make a new commit for the fixes.
-4. Report to the lead (`rules.md`, Reports). Send the peer signal for each task of the unit that has a dependent.
+4. Report to the lead (`rules.md`, Reports). Send `committed <task> <sha>` to the lead for each task of the unit that has a dependent.
 5. Verify, unless your brief has `role: builder` and a `verifier` that is not `none`:
    - Take a slot for each test command when the repo has `heavy_test_slots` above 0.
    - Run each command of `verify` in the unit worktree, in order. A child unit is verified over its parent and itself: the diff from the merge-base with the default branch.
    - The test of one task is not the verify of the unit. Report a verdict only after the full table.
    - Send the verdict message: the verdict and the table.
-6. After you report, do not wait for the lead. With a task list, claim the next queued unit or free task that is ready. Without one, wait for a `task_assignment` and end your turn. A message of the lead about your unit comes before everything else.
+6. After you report, do not wait for the lead. With a task list, claim the next queued unit or free task that is ready. Without one, wait for an `assign <unit>` message and end your turn. A message of the lead about your unit comes before everything else.
 
 ## Queue and free tasks
 
-Your brief can carry a `queue`: units with no dependency and no owner. Claim the first one whose tasks are open and that lists no file (same repo, same path) that a task in progress lists. Claim it with `TaskUpdate`, then `TaskGet`. When the owner is not you, take the next. Never own two tasks at once. Create the worktree from the base of the repo record.
+Your brief can carry a `queue`: units with no dependency and no owner. Claim the first one whose tasks are open and that lists no file (same repo, same path) that a task in progress lists. Claim it with `TaskUpdate`, then `TaskGet`. When the owner is not you, take the next. Never own two tasks at once. Send the lead `claimed <unit>` in the same turn, so that it records the owner. Create the worktree from the base of the repo record. A child unit is never in the queue: it arrives as `assign <unit>`, with its worktree and parent branch.
 
 A free task is a task whose dependencies are committed and that modifies no file that another open task modifies. Build it in a side worktree from the tip of the branch that holds its dependencies, commit it, and report `free <task> committed <sha>`.
+
+## Verifier
+
+A brief with `role: verifier` has no unit. Wait for `verify <unit> <worktree> <base sha>` messages. For each: run the verify in that worktree as Per unit, step 5 says, with the slots of the repo, and edit nothing. Report the verdict and the table. When the message says `compliance: yes`, also run the compliance review of the unit yourself with the prompt of `compliance-review.md` and report its result in the same message. Never ship a unit unless the lead sends `ship`. A verify message starts the verify now: never answer "queued".
 
 ## Ship
 

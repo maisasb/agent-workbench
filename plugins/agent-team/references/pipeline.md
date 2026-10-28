@@ -19,7 +19,7 @@ Start `agent-team:team-planner` once, in the background, with: `plugin_root`, `f
 
 When the planner returns, run one `ls` on the artifact folder. `spec.md`, `plan.md`, `tasks.md` and `module-map.md` must exist and not be empty. A summary is not proof. When a file is missing, start the planner again once (`scope=both` when `spec.md` is missing, else `scope=plan`) and name the file.
 
-Read `tasks.md` once. Check the order of the tasks: `python3 ${CLAUDE_PLUGIN_ROOT}/tools/depends-check.py .agent-team/features/<feature>/tasks.md`. On `RESULT INVALID`, or when a task depends on a task of another repo, build no unit. Start the planner once with `scope=plan` and the errors. When the problem stays, show it at the gate.
+Read `tasks.md` once. Check the references and the cycles of the dependencies: `python3 <plugin_root>/tools/depends-check.py .agent-team/features/<feature>/tasks.md`. On `RESULT INVALID`, or when a task depends on a task of another repo, build no unit. Start the planner once with `scope=plan` and the errors. When the problem stays, show it at the gate.
 
 A dependency between two tasks that share no file and no symbol, only because their phases come in a given order, is suspect. Start the planner once with the feedback `Depends on only for a shared file or symbol`.
 
@@ -29,12 +29,12 @@ A dependency between two tasks that share no file and no symbol, only because th
 
 **Units.** One unit for each card or story in each repo. A unit runs its tasks in order, with one teammate. Unit B depends on unit A when a task of B depends on a task of A. Drop a parent that is already an ancestor of another parent. Merge units that form a cycle. A stack has at most 4 levels: merge a deeper unit into its base parent. Units of different repos are independent.
 
-**Final validation task.** A task that only runs lint, typecheck, the full suite or a manual smoke check is covered by the verify of each unit. Show it as `covered by unit verify`. It is never a unit. A task that compares results across units (for example text parity between two branches) is a `lead check after ship`: you run it after the pull requests exist, change nothing, and report the result at the close.
+**Final validation task.** A task with `Kind: validation` (it only runs lint, typecheck, the full suite or a manual smoke check) is covered by the verify of each unit. Show it as `covered by unit verify`. It is never a unit. A task with `Kind: lead-check` (it compares results across units, for example text parity between two branches) is a `lead check after ship`: you run it after the pull requests exist, change nothing, and report the result at the close.
 
 **Team check.** Minutes of a task: 0.15 for each step plus 0.2 for each file. A unit costs its task minutes plus `V`, the `verify_ship_minutes` of its repo. Count only tasks that are not final validation or lead check tasks. Use a team when one of these holds:
 
-- (a) At least 4 tasks and at least 2 units.
-- (b) At least 4 tasks in one unit or stack, whose tasks can run in parallel (width of at least 2) and a saving of at least 8 minutes. `S_b` is the sum of the task minutes and `C_b` the critical path. Verify and ship are not counted. This case is experimental.
+- (a) At least 4 tasks and at least 2 units. A chain of dependent units gives smaller pull requests, not time: it starts with one teammate.
+- (b) At least 4 tasks in one unit or stack, whose tasks can run in parallel (width of at least 2) and a saving of at least 8 minutes. `S_b` is the sum of the task minutes and `C_b` the critical path. Verify and ship are not counted. This case is experimental and needs free tasks (section 5), so it does not hold without a task list.
 - (c) At least 2 independent units and a saving of at least 8 minutes. `S_c` is the sum of all unit minutes. `C_c` is the largest sum of unit minutes along one chain of dependent units. The saving is `S_c - C_c`.
 
 Near miss: when only (c) is close, with a saving of 4 to 8 minutes, offer the team and the sequence at the gate and recommend the team. Below 4, run the units in sequence.
@@ -43,7 +43,7 @@ Without task tools, (b) does not hold, and (a) or (c) needs at most 5 root units
 
 The team has at most `min(5, width)` teammates, where width is the largest number of tasks that can be ready together. It starts with one teammate for each root unit and grows only when a pull request waits for a task.
 
-**Sequence.** Run the units yourself, one after the other, each in the run worktree of its repo, with the steps of `rules.md` as a guide. Open one pull request for each unit.
+**Sequence.** Build the units yourself, one after the other, with no teammate. For each unit: create its worktree and branch as in section 4, steps 2 to 4; implement test-first as `rules.md` says (Work, Git); run the verify yourself; run the compliance review with the prompt of `compliance-review.md` (start one `general-purpose` agent); then push and open the pull request as `agents/team-builder.md`, section Ship, says. Write the ledger in the same way.
 
 ## 3. Gate
 
@@ -53,11 +53,10 @@ Show: the spec in 5 lines, the plan in 5 lines, the unit table (unit, repo, card
 
 **Call 1.** Approve or adjust, and each open question of the spec (at most 3; the others stay as assumptions in the text). Options: approve the spec, the plan and the unit table (recommended); approve and run in sequence (near miss only); decline the added scope; adjust the plan. The text of the approve option names what the approval authorizes: the `--amend` of a local unit commit when a gate or a verify fix changes it, and the `--force-with-lease` push of a child unit branch after its parent changes. Feedback about requirements goes to the planner with `scope=both`. Feedback about architecture, tasks or tests goes with `scope=plan`. After any new planner run, compute the units again and ask call 1 again.
 
-**Call 2.** Four ship questions for every pull request:
+**Call 2.** Three ship questions for every pull request:
 
 - Push consent, before any code exists.
 - Draft or ready for review.
-- Run a local review before the push.
 - The hold label (`hold_label`), for each repo that has an auto-merge workflow. Recommend it: a ready pull request can merge a minute after the review, and in a stack a child can merge before its parent.
 
 Optional steps (deploy to a test environment, a bug bash) are not gate questions. Offer them at the close.
@@ -69,20 +68,21 @@ Optional steps (deploy to a test environment, a bug bash) are not gate questions
 3. **Unit worktrees.** Root unit: `git -C <path> worktree add <worktree_root>/<feature>--<unit> -b <branch> <base_sha>`. Child unit: the same, with the branch of its base parent as the start point, created after every parent is committed. For each extra parent run `git merge --no-edit <parent branch>` in the child worktree. A conflict goes to the user. Record the SHA after the merges as `start_sha`.
 4. **Install.** After a worktree exists, run `install` of the repo record with a limit of 480 seconds (`perl -e 'alarm shift; exec @ARGV' 480 <install>`) and the install lock of `rules.md`. An install is done only when its exit code is 0 and the dependency folder exists and is not empty. An install that ended at once with no output has not run.
 5. **Ledger.** Write `.agent-team/features/<feature>/ledger.md` (see below).
-6. **Teammates.** For each root unit start one `agent-team:team-builder` in the background with the names `alpha`, `bravo`, `charlie`, `delta`, `echo`, in this order. Check that each answers by name with `SendMessage`. With a task list, create one task for each task of `tasks.md` and give the first task of each unit to its teammate before the brief. Append `<unit> assigned_at=<epoch>` and `<unit> owner=<name>` to the ledger in the same turn.
+6. **Teammates.** For each root unit start one `agent-team:team-builder` in the background with the names `alpha`, `bravo`, `charlie`, `delta`, `echo`, in this order. With a task list, create one task for each task of `tasks.md` and give the first task of each unit to its teammate before the brief. Append `<unit> assigned_at=<epoch>` and `<unit> owner=<name>` to the ledger in the same turn.
 7. **Watchdog.** After the dispatch run `sleep 840; echo watchdog` in the background. When it ends, read the ledger. Apply the limits. When a unit has not changed in 14 minutes and its teammate owns it, ask `status? answer in one line` once. When a second wake-up shows no change, tell the user: unit, teammate, last event, options (retry, take over, stop). Stop the timer at the close.
 
-**Brief of a teammate.** `role: builder` or `role: verifier`; `team_size`; `verifier` (a name or `none`); `lead: team-lead`; `task_list: yes|no`; the repo records; for each unit its name, repo, tasks in order, worktree path, branch, parent branch, and the line range in `tasks.md`; the paths of `spec.md`, `plan.md`, `tasks.md`, `rules.md`; `plugin_root`, `feature`; `pr_notes` (what the user asked for the commit type and the pull request text, word for word; omit when none); `queue` (units with no owner, when the team is smaller than the number of roots).
+**Brief of a teammate.** `role: builder` or `role: verifier`; `team_size`; `verifier` (its name, fixed now, or `none`); `lead: team-lead`; `task_list: yes|no`; the repo records; for each unit its name, repo, tasks in order, worktree path, branch, parent branch, and the line range in `tasks.md`, and the `Skill:` flag of each task that has one; the paths of `spec.md`, `plan.md`, `tasks.md`, `rules.md`; `plugin_root`, `feature`; `pr_notes` (what the user asked for the commit type and the pull request text, word for word; omit when none); `queue` (units with no owner, when the team is smaller than the number of roots).
 
-Use a verifier when the plan has 3 units or more and the team starts with one builder. Create it when the first unit is committed, not at the start.
+Use a verifier when the plan has 3 units or more and the team starts with one builder. Write its name in every brief at the dispatch and start the teammate when the first unit is committed, not at the start. A builder whose brief names a verifier never verifies.
 
 **Ledger format.** Plain text, append-only.
 
 ```
 # ledger <feature>
-gate: team=<yes|no> push=<yes|no> local_review=<yes|no> draft=<yes|no> hold_label=<yes|no>
-repo <name> path=<path> default_branch=<b> worktree_root=<w> install=<cmd> unit_suffix=<s> base_sha=<sha>
-<unit> | <repo> | <branch> | <parent or -> | <start_sha or ->
+gate: team=<yes|no> push=<yes|no> draft=<yes|no>
+pr_notes: <the words of the user for the commit type and the pull request text, or none>
+repo <name> path=<path> default_branch=<b> worktree_root=<w> install=<cmd> unit_suffix=<s> base_sha=<sha> hold_label=<yes|no>
+<unit> | <repo> | <branch> | <parent or -> | <start_sha or -> | <tasks> | <cards>
 <unit> assigned_at=<epoch>
 <unit> owner=<name>
 <unit> commit_sha=<sha>
@@ -91,6 +91,7 @@ repo <name> path=<path> default_branch=<b> worktree_root=<w> install=<cmd> unit_
 <unit> pr=<n>
 <unit> opened_at=<YYYY-MM-DD>
 <unit> parent_tip=<sha>
+<unit> check=<name> done@<sha>
 <unit> note=<one line>
 ```
 
@@ -100,15 +101,30 @@ Never edit a line: append. The last line of a field wins. A verdict always carri
 
 **Turn economy.** Each of your turns rereads your whole context. Append ledger lines in the same Bash call as the next `SendMessage`. Handle events that arrive together in one turn. An idle notice or a report that needs no decision gets no text and no call. Never resend a `ship` or a `verify` because an idle notice crossed it: read the ledger first. A question to the user stops the unit: ask with `AskUserQuestion` and wait, or act without asking. Never write "tell me if you want X" and go on.
 
+**Incoming messages.**
+
+| Message | You do |
+|---|---|
+| `unit <name> committed <sha>` | The steps of the next paragraph. |
+| a verdict | The paragraph on verdicts. |
+| `committed <task> <sha>` | Append `commit_sha` when it is a unit commit. Forward it to the owner of each dependent unit. |
+| `free <task> committed <sha>` | Append `note=free <task> <sha>`. The builder of the unit takes the result. |
+| `claimed <unit>` | Append `owner=<name>` and `assigned_at=<epoch>`. |
+| `dispatch <agent> unit <unit>` | Start the agent in the background with the fields of its contract and paths inside the unit worktree. Send the result to the teammate as `result <agent>: <text>`. |
+| a question or a diagnosis | Ask the user at the next stop, in a batch with the others. Send the answer to the teammate. |
+| `PR #<n> <url>` | Section 6, step 5. |
+
+**Free tasks.** A task is free when each task it depends on is committed and it changes no file (same repo, same path) that another open task changes. When a teammate is idle and a free task is ready, send it `free <task> base <sha>`: the tip of the branch that holds the dependencies. The teammate builds it in a side worktree and reports `free <task> committed <sha>`. The builder of the unit takes the result. A verify or an assignment always comes before a free task. Never move a task that a teammate started, unless its teammate stays silent through the watchdog window.
+
 **A teammate reports a unit committed.** The first line is `unit <name> committed <full sha>`. The report must carry `gates: polish ..., prose ...` and `tdd: ...`. When the SHA or a line is missing, reply once. A `tdd: no` is a note in the ledger, not a block. Then:
 
 1. Append `commit_sha`.
-2. Measure the unit with `git -C <path> diff --shortstat <base>..<branch>`. At most 1 file and 5 lines: skip the compliance review and append `note=compliance skipped (small)`.
-3. In the same turn, in the background: the compliance review (`compliance-review.md`), and each check that the repo wants after the commit (for example a security scan), one agent each. Pass an agent only the fields of its own contract, each path inside the unit worktree. Add one line (the worktree path and `run every git command with git -C <path>`) only for an agent that has the `Bash` tool and no path field. Without a verifier, the builder verifies in its own session. With one, send `verify <unit> <worktree> <base sha>`.
+2. Measure the unit with `git -C <path> diff --shortstat <base>..<branch>`, where `<base>` is the `base_sha` of the repo for a root unit and the `start_sha` of the unit for a child. Every `<base>` or `<base sha>` in a message and in `compliance-review.md` means the same value. At most 1 file and 5 lines: skip the compliance review and append `note=compliance skipped (small)`.
+3. In the same turn, in the background: the compliance review (`compliance-review.md`), and each entry of `post_commit_checks` of the repo config (an `agent` to start, or a `run` command to run read-only in the unit worktree), one each, and append `<unit> check=<name> done@<sha>` when it ends. Pass an agent only the fields of its own contract, each path inside the unit worktree. Add one line (the worktree path and `run every git command with git -C <path>`) only for an agent that has the `Bash` tool and no path field. Without a verifier, the builder verifies in its own session. With one, send `verify <unit> <worktree> <base sha>`.
 4. When a check reports findings, ask the user once, in the batch of the verdict: fix first, or proceed. Send no `ship` before the answer. On "fix first", treat the findings as a compliance defect.
-5. When a fix changes the tree of the unit, discard the reports and run the checks again.
+5. When a fix changes the tree of the unit (`git rev-parse <sha>^{tree}`), discard the reports and run the checks again, and send the verifier `restart verify <unit> <sha>` when one verifies.
 
-**A verdict.** It carries the full table of the verify: each command of `verify`, with its result. A message that shows only the test of one task is not a verdict: reply once `run the verify of the unit and report the table`.
+**A verdict.** `APPROVED`: every command of `verify` exited 0. `REJECTED`: a command failed and the failure is in the diff or unexplained. `BLOCKED`: a command could not run (a missing tool or login), or every failure reproduces on the base. The verdict report carries `tip <sha>`, and you append `verdict=<word>@<sha>`. It carries the full table of the verify: each command of `verify`, with its result. A message that shows only the test of one task is not a verdict: reply once `run the verify of the unit and report the table`.
 
 - `APPROVED` with a test that fails only in the full run, is outside the diff, and passes alone: append `note=<test name>`, and treat it as approved.
 - `APPROVED`, the compliance review has no defect, and the checks are back and answered: ship the unit.
@@ -116,15 +132,15 @@ Never edit a line: append. The last line of a field wins. A verdict always carri
 - A compliance note is not a defect. A defect is a requirement of the spec that the code breaks or misses. A note goes to the ledger and the final report, never to the builder.
 - A compliance defect goes to the teammate at once, even in the middle of a verify. It stops the verify, fixes, amends the unit commit, and verifies once.
 
-**Changed parent.** When a parent unit changes after a child started, the parent owner sends `committed <task> <sha>` to the child owner. The child rebases onto the parent branch, merges the extra parents again and verifies again. With `task_list: no`, the signal goes to you, and you forward it to the owner of each dependent unit (the last `owner` line in the ledger).
+**Changed parent.** When a parent unit changes after a child started, the parent owner sends `committed <task> <sha>` to you, and you forward it to the owner of each dependent unit (the last `owner` line in the ledger). The child rebases onto the parent branch, merges the extra parents again and verifies again. With `task_list: no`, the signal goes to you, and you forward it to the owner of each dependent unit (the last `owner` line in the ledger).
 
-**Limits.** A unit fails when a fourth fix cycle would be needed, or when 45 minutes pass from `assigned_at` with no approved verdict. Stop the work. Keep the branch and the worktree. For a time failure send the teammate `stop <unit>`. For a fix failure send nothing. Ask the user once: raise the limit and retry once, take over, or drop the unit. A unit that depends on a failed unit does not start. Only the user raises a limit.
+**Limits.** A fix cycle is one fix after `REJECTED`, `BLOCKED` or a compliance defect, followed by a new verify. A fix of a gate before the first verify is not a cycle. Append `fix_cycles=<n>` with each verdict. A unit fails when a fourth fix cycle would be needed, or when 45 minutes pass from `assigned_at` with no approved verdict. Stop the work. Keep the branch and the worktree. For a time failure send the teammate `stop <unit>`. For a fix failure send nothing. Ask the user once: raise the limit and retry once, take over, or drop the unit. A unit that depends on a failed unit does not start. Only the user raises a limit.
 
 **Stalled commands.** A command with no output for several minutes is not always stuck. Look at the process tree and the lock folders first. Kill only processes that belong to this run, and ask the user before you kill any other.
 
 **Verifier balance.** A verify is the longest step. When a teammate is idle and a committed unit waits, give the verify to the idle one. Never leave a teammate idle while another has two verifies waiting.
 
-**Growth.** Create the next teammate when a task is ready, no builder is idle and fewer than `min(5, width)` exist, and a pull request waits for that task. Do not create one for a task that no pull request waits for.
+**Growth.** Create the next teammate when a task is ready, no builder is idle and fewer than `min(5, width)` exist, and a pull request waits for that task. Do not create one for a task that no pull request waits for. Give a child unit to an idle teammate with `assign <unit>` (name, repo, tasks, worktree, branch, parent branch, line range in `tasks.md`), after every parent is committed. With a task list also call `TaskUpdate` for its first task. Append `owner` and `assigned_at`. When no teammate is idle, keep the unit until one is.
 
 ## 6. Ship
 
@@ -139,15 +155,15 @@ Never edit a line: append. The last line of a field wins. A verdict always carri
 1. Close the final validation tasks. Stop the watchdog.
 2. Run each `lead check after ship` and keep the result.
 3. Report in at most 12 lines, not counting the table: unit, repo, cards, pull request, base branch and verdict; the stack order; the checks; what was not run; what was not verified. Do not paste the reports of the teammates.
-4. Offer the optional steps in one `AskUserQuestion` call: deploy to a test environment for each repo that has one (one tip at a time, because the environment is shared), and a bug bash for the whole feature. Recommend no for both.
+4. Offer the optional steps in one `AskUserQuestion` call: deploy to a test environment for each repo that has a `deploy` entry in its config (one tip at a time, because the environment is shared; send the owner of the tip `deploy <unit> <target>`), and a bug bash for the whole feature. Recommend no for both.
 5. For each child unit, print the commands for after its parent is squash-merged, with the SHAs from the ledger: `git -C <path> fetch origin && git -C <path> rebase --onto origin/<default_branch> <old parent tip> <child branch>`, then `git push --force-with-lease` and the edit of the pull request base.
 6. Do not message the teammates at the close, except for a deploy that the user accepts. An idle teammate costs nothing, and a message wakes it with a full context read.
 
 ## 8. Resume
 
-Run this section when `ledger.md` exists, before section 4. A context compaction, a crash and a new session all land here. The ledger records what you decided. The facts of git and the code host say what is true. A fact wins.
+Run this section when the brief is `resume <feature>`, or when `ledger.md` exists for the feature. The ledger is in `.agent-team/features/<feature>/` of the run worktree of the lead's repo. When you do not know that path, ask the user for the repo. Skip section 0, step 5. A context compaction, a crash and a new session all land here. The ledger records what you decided. The facts of git and the code host say what is true. A fact wins.
 
-1. Read the ledger. Rebuild the repo records from its `repo` lines. Reuse the worktrees.
+1. Read the ledger. Rebuild the repo records from its `repo` lines, and read the other fields again from `.agent-team.yml` (`config.md`). Reuse the worktrees.
 2. Derive the status of each unit from the facts: pull request open or merged: `shipped`. Tip equals the last `commit_sha` and the last verdict is `APPROVED@<tip>`: `verified`. A commit above the start and a `commit_sha` equal to the tip: `committed`. Early task commits with no such line, or a branch with no commit: `building`. No branch: `queued`.
 3. Do only what is missing. Start teammates again for `building` and `committed` units, with the unit branch and the worktree path.
 4. When a unit changed after its last verdict, verify again.

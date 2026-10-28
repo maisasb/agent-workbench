@@ -4,7 +4,7 @@ Apply to every teammate of a run. The lead follows the locks and the stall rules
 
 ## Scope
 
-- A teammate builds one unit at a time, in one repo, in its own worktree. It never leaves the worktree.
+- A teammate builds one unit at a time, in one repo, in its own worktree. It never leaves the worktree, except to read the paths that its brief names (`spec.md`, `plan.md`, `tasks.md`, this file).
 - A teammate takes only tasks that the lead assigned, that it claimed from the queue, or that are free and ready (with a task list). Without a task list the messages of the lead are the only state.
 - A teammate never starts a subagent. A step that needs one becomes `dispatch <agent> unit <unit>` to the lead, with the input fields of the agent. The lead runs it and sends the result back.
 - A teammate has no tool to ask the user a question and no `Skill` tool. A question goes to the lead in one message. A skill is a `SKILL.md` that the teammate reads and follows itself.
@@ -28,7 +28,7 @@ Apply to every teammate of a run. The lead follows the locks and the stall rules
 ## Reports
 
 - Commit report, at most 5 lines: `unit <name> committed <full sha>` (never "sha below"), `gates: polish <ok|fixed n>, prose <ok|trimmed n>`, `tdd: red first for every task` or `tdd: no (<task>, <reason>)`, files changed, anything not verified.
-- Verdict report, in one message: the verdict, the table of the verify (each command and its result), and the compliance result when asked. A verdict follows only a full verify, not the test of one task.
+- Verdict report, in one message: the verdict word, `tip <sha>` (the commit that you verified), the table of the verify (each command and its result), and the compliance result when asked. A verdict follows only a full verify, not the test of one task.
 - Ship report: `PR #<n> <url>` in one line.
 - A message `status?` gets one line: unit, last step, what you wait for.
 - Do not send thanks, acknowledgements or status updates. When you have nothing to report, end your turn.
@@ -36,9 +36,9 @@ Apply to every teammate of a run. The lead follows the locks and the stall rules
 
 ## Messages
 
-- To the lead: the commit report, the verdict, the ship report, a question or diagnosis, a `dispatch` request.
-- To a peer: `committed <task> <sha>`, whenever a task commit or the tip of a unit branch changes (first commit, amend, fix, adjust, rebase). The SHA is the new tip.
-- Received: `verify <unit>`, `ship <unit>`, `adjust <unit>: <request>`, `restart verify <unit> <sha>`, `stop <unit>`, `free <task> base <sha>`, `task_assignment`. A message of the lead about your unit comes before everything else.
+- To the lead: the commit report, the verdict, the ship report, a question or diagnosis, a `dispatch <agent> unit <unit>` request, `claimed <unit>` when you take a queued unit, `free <task> committed <sha>`.
+- Signals about a changed task commit or unit tip: send `committed <task> <sha>` to `team-lead`, whenever a task commit or the tip of a unit branch changes (first commit, amend, fix, adjust, rebase). The SHA is the new tip. The lead forwards it to the owners of the dependent units.
+- Received: `verify <unit>`, `ship <unit>`, `adjust <unit>: <request>`, `restart verify <unit> <sha>`, `stop <unit>`, `free <task> base <sha>`, `assign <unit>`, `status?`. A message of the lead about your unit comes before everything else.
 - `verify <unit>` starts the verify now. Never answer "queued". A message `restart verify <unit> <sha>` means the unit changed: compare `git rev-parse <sha>^{tree}` with the tree you verify, and restart only when they differ.
 
 ## Installs

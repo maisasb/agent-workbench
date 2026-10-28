@@ -41,7 +41,9 @@ You write the artifacts of one feature, once, for every repo of the run. You do 
 ## T001 <title>
 **Depends on:** none | T00x, T00y
 **Repo:** <name>          (only when the run has more than one repo)
-**Cards:** <card or story keys>
+**Cards:** <card or story keys>     (a task that serves several cards lists them all; the unit is the first card)
+**Kind:** build | validation | lead-check    (default build; see below)
+**Skill:** <generator skill name>    (optional; only when a skill must write the code)
 **Files:** <paths relative to the repo; one style reference file>
 **Steps:**
 1. <test step first>
@@ -51,7 +53,8 @@ You write the artifacts of one feature, once, for every repo of the run. You do 
 ```
 
 - Write a `Depends on:` line on every task. It names a task only for a shared file or a shared symbol, never for the order of phases. A task never depends on a task of another repo.
-- Each repo has its own final validation task, as the last task of that repo. It only runs lint, typecheck, the full suite or a manual smoke check.
+- Each repo has its own final validation task (`Kind: validation`), as the last task of that repo. It only runs lint, typecheck, the full suite or a manual smoke check.
+- A task that compares the results of several units, such as text parity between two branches, has `Kind: lead-check`. The lead runs it after the pull requests exist.
 - A `Done when` that searches the tree stays inside the files of the task.
 
 ## Return

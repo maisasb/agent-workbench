@@ -9,8 +9,9 @@ Task format (see agents/team-planner.md):
     **Depends on:** none | T002, T003
     **Repo:** <name>
 
-Reports: a dependency on an ID that is not a task, a task that depends on itself,
-a dependency on a task of another repo, and a cycle. Ends with one line:
+Reports: a duplicate task ID, a task with no `Depends on:` line, a dependency on an ID
+that is not a task, a task that depends on itself, a dependency on a task of another
+repo, a `Repo:` line present on some tasks and missing on others, and a cycle. Ends with one line:
 `RESULT ok` or `RESULT INVALID`. Exit code 0 when ok, 1 when invalid, 2 on a usage error.
 """
 import re
@@ -25,6 +26,7 @@ TASK_ID = re.compile(r"T\d+")
 def parse(path):
     tasks = {}
     order = []
+    duplicates = []
     current = None
     with open(path, encoding="utf-8") as handle:
         for line in handle:
@@ -32,6 +34,8 @@ def parse(path):
             head = HEADING.match(line)
             if head:
                 current = head.group(1)
+                if current in tasks:
+                    duplicates.append(current)
                 tasks[current] = {"depends": [], "has_line": False, "repo": None}
                 order.append(current)
                 continue
@@ -45,7 +49,7 @@ def parse(path):
             repo = REPO.match(line)
             if repo:
                 tasks[current]["repo"] = repo.group(1)
-    return tasks, order
+    return tasks, order, duplicates
 
 
 def find_cycle(tasks):
@@ -80,8 +84,14 @@ def main(argv):
     if len(argv) != 2:
         print(__doc__, file=sys.stderr)
         return 2
-    tasks, order = parse(argv[1])
+    tasks, order, duplicates = parse(argv[1])
     errors = []
+    for task in sorted(set(duplicates)):
+        errors.append(f"{task}: the ID appears more than once")
+    repos = [t["repo"] for t in tasks.values()]
+    if any(repos) and not all(repos):
+        missing = [k for k, t in tasks.items() if not t["repo"]]
+        errors.append("'Repo:' is missing on " + ", ".join(missing) + " (a plan with more than one repo needs it on every task)")
     if not tasks:
         errors.append("no task headings found (expected '## T001 <title>')")
     for task in order:
