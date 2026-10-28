@@ -13,6 +13,12 @@
       "description": "A process for building agent workflows: test rounds with cost and timeline analysis, consistency sweeps over instruction files, and design rules for agent teams.",
       "source": "./plugins/agent-process",
       "version": "0.1.0"
+    },
+    {
+      "name": "agent-team",
+      "description": "A command that splits a feature into units and builds them with a team of Claude Code agents. One pull request for each unit, units of different repos in parallel.",
+      "source": "./plugins/agent-team",
+      "version": "0.1.0"
     }
   ]
 }

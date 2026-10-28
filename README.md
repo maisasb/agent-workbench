@@ -7,12 +7,13 @@ A personal marketplace for Claude Code. It holds a process to design, test and r
 ```
 /plugin marketplace add <your-user>/agent-workbench
 /plugin install agent-process@agent-workbench
+/plugin install agent-team@agent-workbench
 ```
 
-To try a plugin without a marketplace, clone the repo and start Claude Code from the terminal:
+To try a plugin without a marketplace, clone the repo and start Claude Code from the terminal. `--plugin-dir` can repeat:
 
 ```
-claude --plugin-dir /path/to/agent-workbench/plugins/agent-process
+claude --plugin-dir /path/to/agent-workbench/plugins/agent-process --plugin-dir /path/to/agent-workbench/plugins/agent-team
 ```
 
 The `--plugin-dir` flag works in the terminal only, not in the desktop app.
@@ -22,6 +23,7 @@ The `--plugin-dir` flag works in the terminal only, not in the desktop app.
 | Plugin | What it gives you |
 |---|---|
 | `agent-process` | Three skills, four reference files and two scripts. They cover test rounds of an agent workflow, consistency sweeps over instruction files, and design rules for agent teams. |
+| `agent-team` | A runnable command, `/agent-team:feature`. A lead plans once, the user approves at one gate, and teammates build one pull request for each unit. Two agents, four reference files and one script. |
 
 ### Skills of `agent-process`
 

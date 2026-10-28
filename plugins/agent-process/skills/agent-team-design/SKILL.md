@@ -5,6 +5,8 @@ description: Design rules for a Claude Code command in which a lead agent splits
 
 # Design a lead and teammates command
 
+The plugin `agent-team` of this marketplace is a full command that follows these rules. Read its `references/pipeline.md` for a worked procedure.
+
 Read `${CLAUDE_PLUGIN_ROOT}/references/pattern.md` for the full pattern and `${CLAUDE_PLUGIN_ROOT}/references/claude-code-lessons.md` for what Claude Code allows. This skill is the short form.
 
 ## Decide first
