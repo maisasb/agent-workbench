@@ -19,6 +19,12 @@
       "description": "A command that splits a feature into units and builds them with a team of Claude Code agents. One pull request for each unit, units of different repos in parallel.",
       "source": "./plugins/agent-team",
       "version": "0.1.0"
+    },
+    {
+      "name": "session-panel",
+      "description": "A pane of the open Claude Code sessions: state, last message, reply and approval without entering the session.",
+      "source": "./plugins/session-panel",
+      "version": "0.1.0"
     }
   ]
 }

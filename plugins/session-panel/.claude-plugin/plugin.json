@@ -1,0 +1,9 @@
+{
+  "name": "session-panel",
+  "description": "A pane of the open Claude Code sessions: state, last message, reply and approval without entering the session.",
+  "version": "0.1.0",
+  "author": {
+    "name": "maisasb"
+  },
+  "types": "./types/index.d.ts"
+}
