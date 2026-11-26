@@ -11,7 +11,7 @@ A pane that lists every open Claude Code session on a machine and lets you act o
 - Approves or denies permission requests of other sessions from the pane. Today this covers only Bash commands that start with `echo panel-test`.
 - Shows a one-line band above the prompt while the pane is closed. A colored chip carries the state that most needs a look (needs you, done, working, waiting), with the oldest item beside it and a button that opens the pane.
 - Minimizes: the "− Minimizar" button closes the pane, and the band takes its place. On the desktop app the pane can start as a small widget.
-- Opens a session where it runs: the Claude desktop app, the VS Code extension, Herdr or cmux. The pane finds where each session lives. Herdr and cmux are optional.
+- Opens a session where it runs: the Claude desktop app, the VS Code extension, Herdr, cmux, iTerm2 or Terminal. The pane finds where each session lives. Herdr and cmux are optional. For iTerm2 and Terminal, macOS asks once to let Claude Code control the app.
 
 ## Use
 
