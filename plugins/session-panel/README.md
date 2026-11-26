@@ -9,11 +9,13 @@ A pane that lists every open Claude Code session on a machine and lets you act o
 - Opens the full message of a session (the text of the whole turn).
 - Sends a message to a session without being in it.
 - Approves or denies permission requests of other sessions from the pane. Today this covers only Bash commands that start with `echo panel-test`.
+- Shows a one-line band above the prompt while the pane is closed. A colored chip carries the state that most needs a look (needs you, done, working, waiting), with the oldest item beside it and a button that opens the pane.
+- Minimizes: the "− Minimizar" button closes the pane, and the band takes its place. On the desktop app the pane can start as a small widget.
 - Opens a session where it runs: the Claude desktop app, the VS Code extension, Herdr or cmux. The pane finds where each session lives. Herdr and cmux are optional.
 
 ## Use
 
-- `/panel` opens the pane. `/panel-close` or `Esc` closes it.
+- `/panel` opens the pane. `/panel-close`, `Esc` or the "− Minimizar" button closes it, and the band shows up.
 - `/panel-list` prints the list in the chat.
 - `/panel-read <n>` prints the full message of a session in the chat.
 - `/panel-send <n> <text>` sends a message to a session.

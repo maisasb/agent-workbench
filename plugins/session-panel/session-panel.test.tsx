@@ -54,3 +54,85 @@ test('pressing a session row fills the prompt', async ($, on) => {
     await ui.unmount()
   }
 })
+
+test('the band draws one line with the count', async ($, on) => {
+  on('clock.every', () => ({ value: { cancel() {} } }))
+  on('clock.now', () => ({ value: 1000000 }))
+  on('command.register', () => ({ value: { command: 'x' } }))
+  on('ui.open', () => ({ value: { isPlaced: false } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('fs.list', (_, e) => ({ value: String(e.path).endsWith('sessions') ? [{ name: 'a.json', kind: 'file', size: 1, mtimeMs: 0, isLink: false }] : [] }))
+  on('fs.read', () => ({ value: JSON.stringify(registry) }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify(details), stderr: '' } }))
+  on('session.id', () => ({ value: 'other' }))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await new Promise(r => setTimeout(r, 50))
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({
+      plugin: 'session-panel',
+      component: 'AbovePrompt',
+      surface,
+      props: { hasSurvey: false, isCollapsed: false, bodyColumns: 67 },
+    } as any)
+    expect(await ui.find({ type: 'Text' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'band-open' })).toBeDefined()
+    await ui.press({ key: 'band-open' })
+    await ui.unmount()
+  }
+})
+
+test('the band hides while the pane is placed', async ($, on) => {
+  on('clock.every', () => ({ value: { cancel() {} } }))
+  on('clock.now', () => ({ value: 1000000 }))
+  on('command.register', () => ({ value: { command: 'x' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('fs.list', (_, e) => ({ value: String(e.path).endsWith('sessions') ? [{ name: 'a.json', kind: 'file', size: 1, mtimeMs: 0, isLink: false }] : [] }))
+  on('fs.read', () => ({ value: JSON.stringify(registry) }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify(details), stderr: '' } }))
+  on('session.id', () => ({ value: 'other' }))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await new Promise(r => setTimeout(r, 50))
+  const ui = await $.ui.mount({
+    plugin: 'session-panel',
+    component: 'AbovePrompt',
+    surface: 'terminal',
+    props: { hasSurvey: false, isCollapsed: false, bodyColumns: 67 },
+  } as any)
+  expect(await ui.find({ type: 'Text' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('the band comes back when the pane closes', async ($, on) => {
+  on('clock.every', () => ({ value: { cancel() {} } }))
+  on('clock.now', () => ({ value: 1000000 }))
+  on('command.register', () => ({ value: { command: 'x' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.close', () => ({ value: undefined }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('fs.list', (_, e) => ({ value: String(e.path).endsWith('sessions') ? [{ name: 'a.json', kind: 'file', size: 1, mtimeMs: 0, isLink: false }] : [] }))
+  on('fs.read', () => ({ value: JSON.stringify(registry) }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify(details), stderr: '' } }))
+  on('session.id', () => ({ value: 'other' }))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await new Promise(r => setTimeout(r, 50))
+  const mount = () =>
+    $.ui.mount({
+      plugin: 'session-panel',
+      component: 'AbovePrompt',
+      surface: 'terminal',
+      props: { hasSurvey: false, isCollapsed: false, bodyColumns: 67 },
+    } as any)
+  let ui = await mount()
+  expect(await ui.find({ type: 'Text' })).toBeUndefined()
+  await ui.unmount()
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await pane.press({ key: 'minimize' })
+  await pane.unmount()
+  ui = await mount()
+  expect(await ui.find({ type: 'Text' })).toBeDefined()
+  await ui.unmount()
+})

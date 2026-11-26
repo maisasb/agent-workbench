@@ -60,6 +60,34 @@ const reading = atom({ plugin: 'session-panel', key: 'reading' } as const, '', {
   shape: 'reading-1',
 })
 
+const paneOpen = atom({ plugin: 'session-panel', key: 'paneOpen' } as const, false, {
+  shape: 'paneOpen-1',
+})
+
+// Whether the pane's own drawing has run since it last closed. A surface can seat
+// the pane after `$.ui.open` resolved, so the drawing is the proof it is on screen.
+let paneDrawn = false
+// Whether the state already says so; drawing is pure, so a timer writes it.
+let paneSet = false
+
+// Opens the pane and remembers whether a surface draws it: the band above the
+// prompt hides while it does.
+const openPane = async ($: any, options: Record<string, unknown>) => {
+  const placed: any = await $.ui
+    .open({ id: PANE, title: 'Sessions', rows: SIZE.rows, columns: SIZE.columns, ...options })
+    .catch(() => undefined)
+  await update($, paneOpen, () => placed?.isPlaced === true)
+}
+
+// A plugin's own `$.ui.close` does not raise its own `ui.close` hook, so the
+// state the band reads is set here too.
+const closePane = async ($: any) => {
+  await $.ui.close({ id: PANE }).catch(() => undefined)
+  paneDrawn = false
+  paneSet = false
+  await update($, paneOpen, () => false)
+}
+
 const parse = (text: string): any => {
   try {
     return JSON.parse(text)
@@ -496,15 +524,21 @@ export const register: Register = on => {
     for (const [name, description] of commands) {
       await $.command.register({ name, description })
     }
-    void $.ui.open({ id: PANE, title: 'Sessions', rows: SIZE.rows, columns: SIZE.columns })
+    void openPane($, { placement: 'widget' })
     void refresh($)
     $.clock.every(3000, () => void refresh($))
+    $.clock.every(500, () => {
+      if (paneDrawn && !paneSet) {
+        paneSet = true
+        void update($, paneOpen, () => true)
+      }
+    })
 
     return next(e)
   })
 
   on('command.run', { command: 'panel' }, async $ => {
-    await $.ui.open({ id: PANE, title: 'Sessions', focus: true, closeOnEscape: true, rows: SIZE.rows, columns: SIZE.columns })
+    await openPane($, { focus: true, closeOnEscape: true })
 
     return { text: 'Sessions pane opened.' }
   })
@@ -576,7 +610,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'panel-close' }, async $ => {
     await $.ui.close({ id: READER }).catch(() => undefined)
-    await $.ui.close({ id: PANE }).catch(() => undefined)
+    await closePane($)
 
     return { text: 'Sessions panes closed.' }
   })
@@ -609,7 +643,90 @@ export const register: Register = on => {
     return { decision: 'ask', reason: 'the session panel got no answer in time' }
   }).catch(($, e, next) => next(e))
 
+  // A one-row band above the prompt: how many sessions need you and the oldest one.
+  // The person collapses it with the engine's own control; pressing the button opens the pane.
+  on('ui.close', async ($, e, next) => {
+    const closed = await next(e)
+    if (e.id === PANE) {
+      paneDrawn = false
+      paneSet = false
+      await update($, paneOpen, () => false)
+    }
+
+    return closed
+  })
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    // The pane already shows everything the band does.
+    if (await read($, paneOpen)) return next(e)
+    const list = await read($, sessions)
+    if (e.props.hasSurvey) return next(e)
+    if (list.length === 0) return next(e)
+    const { Box, Text, Button } = $.ui.resolve(e)
+    const now = await $.clock.now()
+    const requests = [...(await read($, pending))].sort((a, b) => a.at - b.at)
+    const g = group(list, await read($, dismissed), now, await $.session.id())
+    const needs = requests.length + g.waiting.length
+    const oldest = [...g.waiting].sort((a, b) => a.since - b.since)[0]
+    const owner = requests[0] ? list.find(x => x.sessionId === requests[0]?.sessionId) : undefined
+    const fit = (text: string) => (text.length > 60 ? `${text.slice(0, 59)}…` : text)
+    const ago = (ms: number) => {
+      const m = Math.max(0, Math.round((now - ms) / 60000))
+      return m < 60 ? `${m}m` : `${Math.round(m / 60)}h`
+    }
+    const count = (n: number, word: string) => `${n} ${word}`
+    // The chip carries the state that most needs a look; the text carries the rest.
+    const lead =
+      needs > 0
+        ? { text: `${needs} ${needs === 1 ? 'PRECISA' : 'PRECISAM'} DE VOCÊ`, color: NEEDS, key: 'needs' }
+        : g.done.length > 0
+          ? { text: `${g.done.length} ${g.done.length === 1 ? 'CONCLUÍDA' : 'CONCLUÍDAS'}`, color: 'suggestion', key: 'done' }
+          : g.working.length > 0
+            ? { text: `${g.working.length} EM ANDAMENTO`, color: 'success', key: 'working' }
+            : g.blocked.length > 0
+              ? { text: `${g.blocked.length} AGUARDANDO`, color: 'warning', key: 'blocked' }
+              : undefined
+    const rest = [
+      lead?.key !== 'working' && g.working.length > 0 ? count(g.working.length, 'em andamento') : '',
+      lead?.key !== 'blocked' && g.blocked.length > 0 ? count(g.blocked.length, 'aguardando') : '',
+      lead?.key !== 'done' && g.done.length > 0 ? count(g.done.length, g.done.length === 1 ? 'concluída' : 'concluídas') : '',
+    ]
+      .filter(Boolean)
+      .join(' · ')
+    const head =
+      requests[0] !== undefined
+        ? `${fit(owner ? nameOf(owner) : 'pedido')} · ${requests[0].tool}: ${fit(requests[0].summary)} · ${ago(requests[0].at)}`
+        : oldest
+          ? `${fit(nameOf(oldest))} · ${ago(oldest.since)}`
+          : [lead?.key === 'done' ? g.done[0] : lead?.key === 'working' ? g.working[0] : lead?.key === 'blocked' ? g.blocked[0] : undefined]
+              .map(first => [first ? fit(nameOf(first)) : '', rest].filter(Boolean).join(' · '))[0] || 'nada novo'
+
+    // One line. The cockpit band is three elements; this one adds a button. If the
+    // band stops drawing, a row past the band's limits is the first suspect.
+    const columns = Number((e.props as any).bodyColumns) || 80
+    const label = lead ? ` ${lead.text} ` : ''
+    const action = 'abrir painel'
+    const room = Math.max(10, columns - 'painel'.length - 1 - (label ? label.length + 1 : 0) - action.length - 1)
+    const line = head.length > room ? `${head.slice(0, room - 1)}…` : head
+
+    return (
+      <Box flexDirection="row" gap={1} marginTop={1}>
+        <Text color={lead?.color} bold>painel</Text>
+        {label !== '' && (
+          <Text color="inverseText" backgroundColor={lead?.color} bold>{label}</Text>
+        )}
+        <Text>{line}</Text>
+        <Button key="band-open" plain onPress={() => openPane($, { focus: true, closeOnEscape: true })}>
+          {action}
+        </Button>
+      </Box>
+    )
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    // Drawn means placed. Drawing is pure, so only a variable is set here; a timer
+    // turns it into state.
+    paneDrawn = true
     const { Box, Text, Button } = $.ui.resolve(e)
     const list = await read($, sessions)
     const requests = await read($, pending)
@@ -618,7 +735,11 @@ export const register: Register = on => {
     const mine = await $.session.id()
     const now = await $.clock.now()
     const room = Number((e.props as any).bodyColumns) || e.viewport?.columns || 80
-    const width = Math.min(140, Math.max(30, room - 4))
+    // `room` is the pane body's own width, so only a small margin is kept.
+    // Outside the terminal the text is drawn in a proportional font: an average
+    // character is narrower than a cell, so more of them fit in the same columns.
+    const scale = (e as any).surface === 'terminal' ? 1 : 1.2
+    const width = Math.min(140, Math.max(30, Math.floor((room - 2) * scale)))
     const cut = (text: string, room = width) =>
       text.length > room ? `${text.slice(0, room - 1)}…` : text
     const age = (ms: number) => {
@@ -628,6 +749,19 @@ export const register: Register = on => {
     const label = nameOf
     const { waiting, working, blocked, done, idle } = group(list, seen, now, mine)
     const numberOf = (s: Sess) => order({ waiting, working, blocked, done, idle }).indexOf(s) + 1
+    // The small form (desktop widget): the counts only.
+    if ((e.props as any).placement === 'widget') {
+      const needsNow = requests.length + waiting.length
+
+      return (
+        <Box flexDirection="column">
+          <Text bold color={needsNow > 0 ? NEEDS : undefined}>{needsNow} precisam de você</Text>
+          <Text dimColor>
+            {working.length} em andamento · {blocked.length} aguardando · {done.length} concluídas
+          </Text>
+        </Box>
+      )
+    }
     const why = (s: Sess) =>
       s.status === 'shell'
         ? 'processo em segundo plano'
@@ -659,7 +793,8 @@ export const register: Register = on => {
     // session is still working: its message is about to change.
     const canRead = (s: Sess) =>
       !working.includes(s) && (flat(s.said).length > (width - 4) * 2 || s.said.includes('\n\n'))
-    const inner = width - 6
+    // Text columns inside a bordered card: the border and the padding take 4.
+    const inner = width - 4
     // A session as a bordered card: title and age on one line,
     // the last paragraph the session wrote, then its actions.
     const card = (s: Sess, color: string, extra?: any) => (
@@ -713,7 +848,7 @@ export const register: Register = on => {
         <Box flexDirection="column">
           <Box justifyContent="space-between">
             <Text bold>PAINEL</Text>
-            <Text dimColor>/panel-close · esc fecha</Text>
+            <Text dimColor>/panel-close</Text>
           </Box>
           <Text>
             <Text color={needs > 0 ? NEEDS : undefined} bold={needs > 0}>{needs} precisam de você</Text>
@@ -726,7 +861,10 @@ export const register: Register = on => {
             <Text dimColor> · {idle.length} paradas</Text>
           </Text>
         </Box>
-        <Box>
+        <Box gap={1}>
+          <Button key="minimize" onPress={() => closePane($)}>
+            − Minimizar
+          </Button>
           <Button
             key="new-session"
             onPress={async () => {
@@ -802,11 +940,16 @@ export const register: Register = on => {
             {idle.map(s => (
               <Box key={`idle-${s.sessionId}`} justifyContent="space-between">
                 {s.sessionId === mine ? (
-                  <Text dimColor>{numberOf(s)}. {fitName(s, inner - 24)} (esta sessão)</Text>
+                  <Text dimColor>{numberOf(s)}. {fitName(s, Math.max(8, inner - 22))} (esta sessão)</Text>
                 ) : (
-                  <Button key={`pick-${s.sessionId}`} plain onPress={reply(s)}>
-                    <Text dimColor>{numberOf(s)}. {fitName(s, inner - 12)}</Text>
-                  </Button>
+                  <Box>
+                    <Button key={`pick-${s.sessionId}`} plain onPress={reply(s)}>
+                      <Text dimColor>{numberOf(s)}. {fitName(s, Math.max(8, inner - 16))}</Text>
+                    </Button>
+                    <Button key={`open-${s.sessionId}`} plain onPress={open(s)}>
+                      {' ↗ abrir'}
+                    </Button>
+                  </Box>
                 )}
                 <Text dimColor>{age(s.since)}</Text>
               </Box>

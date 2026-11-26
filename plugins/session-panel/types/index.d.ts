@@ -3,6 +3,6 @@ export type Req = { id: string; sessionId: string; tool: string; summary: string
 
 declare module 'claude-code' {
   interface PluginState {
-    'session-panel': { sessions: Shaped<Sess[]>; pending: Shaped<Req[]>; dismissed: Shaped<Record<string, number>>; replyTo: Shaped<string>; reading: Shaped<string> }
+    'session-panel': { sessions: Shaped<Sess[]>; pending: Shaped<Req[]>; dismissed: Shaped<Record<string, number>>; replyTo: Shaped<string>; reading: Shaped<string>; paneOpen: Shaped<boolean> }
   }
 }
