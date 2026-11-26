@@ -411,7 +411,63 @@ const openSession = async ($: any, s: Sess): Promise<string> => {
       : `cmux não abriu: ${String(ran?.stderr || ran?.stdout || 'sem resposta').slice(0, 120)}`
   }
 
-  return `Sem terminal para abrir: não está nos ${panes.length} panes do Herdr nem no cmux.`
+  // iTerm2 and Terminal.app: find the tab by the tty of the session's process.
+  const ps = await run(['ps', '-o', 'tty=', '-p', String(s.pid)])
+  const tty = String(ps?.stdout ?? '').trim()
+  if (/^ttys\d+$/.test(tty)) {
+    const dev = `/dev/${tty}`
+    const scripts: [string, string][] = [
+      [
+        'iTerm2',
+        `if application "iTerm2" is running then
+  tell application "iTerm2"
+    repeat with w in windows
+      repeat with t in tabs of w
+        repeat with x in sessions of t
+          if tty of x is "${dev}" then
+            select w
+            select t
+            select x
+            activate
+            return "ok"
+          end if
+        end repeat
+      end repeat
+    end repeat
+  end tell
+end if
+return "no"`,
+      ],
+      [
+        'Terminal',
+        `if application "Terminal" is running then
+  tell application "Terminal"
+    repeat with w in windows
+      repeat with t in tabs of w
+        if tty of t is "${dev}" then
+          set selected of t to true
+          set index of w to 1
+          activate
+          return "ok"
+        end if
+      end repeat
+    end repeat
+  end tell
+end if
+return "no"`,
+      ],
+    ]
+    for (const [app, script] of scripts) {
+      const ran = await run(['osascript', '-e', script])
+      if (ran?.exitCode === 0 && String(ran.stdout).trim() === 'ok') {
+        await markSeen($, s)
+
+        return `Aberta no ${app}: ${name}`
+      }
+    }
+  }
+
+  return `Sem terminal para abrir: não está nos ${panes.length} panes do Herdr, no cmux, no iTerm nem no Terminal.`
 }
 
 // The name shown for a session: the Herdr workspace the person named, then what

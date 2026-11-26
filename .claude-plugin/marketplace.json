@@ -24,7 +24,7 @@
       "name": "session-panel",
       "description": "A pane of the open Claude Code sessions: state, last message, reply and approval without entering the session.",
       "source": "./plugins/session-panel",
-      "version": "0.2.0"
+      "version": "0.2.1"
     }
   ]
 }
